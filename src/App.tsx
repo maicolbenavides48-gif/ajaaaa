@@ -160,7 +160,7 @@ function AppContent() {
           <div className="flex items-center gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-50 ring-1 ring-slate-200/80">
-                <img src="/aja_app_logo.svg" alt="AJA' APP" className="h-9 w-auto object-contain" />
+                <img src="/aja_app_logo_circular.png" alt="AJAAP" className="h-9 w-9 object-contain" />
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-700">

@@ -8,7 +8,13 @@ function timeSortKey(time: string): string {
 
 function dayOrder(appointments: Appointment[], apt: Appointment): Appointment[] {
   return appointments
-    .filter((a) => a.doctorCedula === apt.doctorCedula && a.scheduledDate === apt.scheduledDate)
+    .filter(
+      (a) =>
+        a.doctorCedula === apt.doctorCedula &&
+        a.scheduledDate === apt.scheduledDate &&
+        a.status !== 'cancelled' &&
+        a.status !== 'absent',
+    )
     .sort(
       (a, b) =>
         timeSortKey(a.scheduledTime).localeCompare(timeSortKey(b.scheduledTime)) ||

@@ -23,7 +23,9 @@ function TvCodesPreview({ onLogout }: { onLogout: () => void }) {
 
   const countdown = useMemo(() => {
     if (!code || !checkinActive) return 0;
-    const remaining = new Date(code.expires_at).getTime() - now;
+    const expiresAt = Date.parse(code.expiresAt);
+    if (!Number.isFinite(expiresAt)) return 0;
+    const remaining = expiresAt - now;
     return Math.max(0, Math.floor(remaining / 1000));
   }, [code, now, checkinActive]);
 

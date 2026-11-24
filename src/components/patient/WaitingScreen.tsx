@@ -16,6 +16,7 @@ import { useNotificationSound } from '../../hooks/useSound';
 import { useNow, formatCountdown } from '../../hooks/useNow';
 import { COUNTDOWN_SECONDS } from '../../types';
 import type { User as AppUser, Appointment } from '../../types';
+import { getOfficialTurn } from '../../lib/queueTurns';
 
 interface WaitingScreenProps {
   user: AppUser;
@@ -146,7 +147,7 @@ export function WaitingScreen({ user }: WaitingScreenProps) {
             {nowServing.status === 'called' ? 'Llamando al turno' : 'En consulta ahora'}
           </p>
           <div className="text-4xl font-extrabold tracking-tight">
-            #{String(nowServing.ticketNumber).padStart(2, '0')}
+            #{String(getOfficialTurn(nowServing, data.appointments)).padStart(2, '0')}
           </div>
           {nowServing.status === 'called' && (
             <p className="text-white/85 text-xs mt-1.5 flex items-center justify-center gap-1.5">
@@ -177,7 +178,7 @@ export function WaitingScreen({ user }: WaitingScreenProps) {
               Tu número de turno
             </p>
             <div className="text-5xl font-extrabold tracking-tight mt-1">
-              #{String(apt.ticketNumber).padStart(2, '0')}
+              #{String(getOfficialTurn(apt, data.appointments)).padStart(2, '0')}
             </div>
           </div>
           {phase === 'in-attendance' && (
@@ -321,14 +322,14 @@ export function WaitingScreen({ user }: WaitingScreenProps) {
                         : 'bg-slate-100 text-slate-500'
                     }`}
                   >
-                    {String(p.ticketNumber).padStart(2, '0')}
+                    {String(getOfficialTurn(p, data.appointments)).padStart(2, '0')}
                   </div>
                   <span
                     className={`text-sm ${
                       isMe ? 'font-semibold text-blue-800' : 'text-slate-500'
                     }`}
                   >
-                    {isMe ? 'Tú' : `Turno ${String(p.ticketNumber).padStart(2, '0')}`}
+                    {isMe ? 'Tú' : `Turno ${String(getOfficialTurn(p, data.appointments)).padStart(2, '0')}`}
                     {p.status === 'rescheduled' && (
                       <span className="text-amber-500 text-xs ml-1.5">(Reagendado)</span>
                     )}

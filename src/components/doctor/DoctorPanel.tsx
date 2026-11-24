@@ -31,6 +31,7 @@ import { getCallRemainingSeconds } from '../../lib/callTimer';
 import { isPastCutoff } from '../../lib/cutoff';
 import { useCheckinActive } from '../../hooks/useCheckinActive';
 import type { User as AppUser, Appointment } from '../../types';
+import { getOfficialTurn } from '../../lib/queueTurns';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { TabStrip } from '../TabStrip';
 
@@ -323,7 +324,7 @@ export function DoctorPanel({ user }: DoctorPanelProps) {
             <span className="text-sm font-medium text-white/80">En consulta ahora</span>
           </div>
           <p className="text-xl font-bold">
-            #{String(inAttendance.ticketNumber).padStart(2, '0')} · {inAttendance.patientName}
+            #{String(getOfficialTurn(inAttendance, myAppointments)).padStart(2, '0')} · {inAttendance.patientName}
           </p>
           <div className="flex items-center gap-1.5 text-white/90 text-sm mt-2 bg-white/10 rounded-lg px-3 py-1.5">
             <Clock className="w-4 h-4" />
@@ -340,7 +341,7 @@ export function DoctorPanel({ user }: DoctorPanelProps) {
             <span className="text-sm font-medium text-white/80">Llamado en curso</span>
           </div>
           <p className="text-lg font-bold mb-3">
-            #{String(calledPatient.ticketNumber).padStart(2, '0')} · {calledPatient.patientName}
+            #{String(getOfficialTurn(calledPatient, myAppointments)).padStart(2, '0')} · {calledPatient.patientName}
           </p>
           <div className="inline-flex items-center gap-2 bg-white/15 rounded-2xl px-5 py-2.5 mb-3">
             <span className="text-3xl font-extrabold font-mono tracking-tight">
@@ -437,6 +438,7 @@ export function DoctorPanel({ user }: DoctorPanelProps) {
                 apt={apt}
                 position={idx + 1}
                 isNext={idx === 0 && !calledPatient}
+                turn={getOfficialTurn(apt, myAppointments)}
                 onClick={() => setSelectedAppt(apt)}
               />
             ))}
@@ -485,7 +487,7 @@ export function DoctorPanel({ user }: DoctorPanelProps) {
                 </div>
                 <div className="flex-1">
                   <span className="text-sm font-medium text-slate-700">
-                    #{String(p.ticketNumber).padStart(2, '0')} · {p.patientName}
+                    #{String(getOfficialTurn(p, myAppointments)).padStart(2, '0')} · {p.patientName}
                   </span>
                 </div>
                 {p.attendanceStartAt && p.attendanceEndAt && (
@@ -504,7 +506,7 @@ export function DoctorPanel({ user }: DoctorPanelProps) {
 
       {/* Patient detail modal */}
       {selectedAppt && (
-        <PatientDetailModal appt={selectedAppt} onClose={() => setSelectedAppt(null)} />
+        <PatientDetailModal appt={selectedAppt} turn={getOfficialTurn(selectedAppt, myAppointments)} onClose={() => setSelectedAppt(null)} />
       )}
     </div>
   );
@@ -514,10 +516,11 @@ interface AppointmentRowProps {
   apt: Appointment;
   position: number;
   isNext: boolean;
+  turn: number;
   onClick: () => void;
 }
 
-function AppointmentRow({ apt, isNext, onClick }: AppointmentRowProps) {
+function AppointmentRow({ apt, isNext, turn, onClick }: AppointmentRowProps) {
   const isScheduled = apt.status === 'scheduled';
   return (
     <div
@@ -531,7 +534,7 @@ function AppointmentRow({ apt, isNext, onClick }: AppointmentRowProps) {
           isNext ? 'bg-blue-700 text-white' : isScheduled ? 'bg-slate-50 text-slate-400' : 'bg-slate-100 text-slate-500'
         }`}
       >
-        {isScheduled ? '—' : String(apt.ticketNumber).padStart(2, '0')}
+        {isScheduled ? '—' : String(turn).padStart(2, '0')}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-800 truncate">{apt.patientName}</p>
@@ -573,10 +576,11 @@ function AppointmentRow({ apt, isNext, onClick }: AppointmentRowProps) {
 // ============================================================
 interface PatientDetailModalProps {
   appt: Appointment;
+  turn: number;
   onClose: () => void;
 }
 
-function PatientDetailModal({ appt, onClose }: PatientDetailModalProps) {
+function PatientDetailModal({ appt, turn, onClose }: PatientDetailModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm animate-slide-up"
@@ -609,7 +613,7 @@ function PatientDetailModal({ appt, onClose }: PatientDetailModalProps) {
           </div>
           <div className="text-right">
             <p className="text-xs text-slate-400">Turno</p>
-            <p className="text-lg font-bold text-blue-700">#{String(appt.ticketNumber).padStart(2, '0')}</p>
+            <p className="text-lg font-bold text-blue-700">{appt.status === 'scheduled' ? 'Pendiente' : `#${String(turn).padStart(2, '0')}`}</p>
           </div>
         </div>
 

@@ -9,8 +9,8 @@ export function AppLogo({ size = 40, className = '', withText = true, textClassN
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <img
-        src="/aja_app_logo.svg"
-        alt="AJA' APP Logo"
+        src="/aja_app_logo_circular.png"
+        alt="AJAAP"
         style={{ height: size, width: 'auto' }}
         className="object-contain"
       />
@@ -26,8 +26,8 @@ export function AppLogo({ size = 40, className = '', withText = true, textClassN
 export function AppLogoMark({ size = 48, className = '' }: { size?: number; className?: string }) {
   return (
     <img
-      src="/aja_app_logo.svg"
-      alt="AJA' APP Logo"
+      src="/aja_app_logo_circular.png"
+      alt="AJAAP"
       style={{ height: size, width: 'auto' }}
       className={`object-contain ${className}`}
     />
