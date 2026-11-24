@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FlaskConical, Loader2, Power, MapPin, Save } from 'lucide-react';
+import { FlaskConical, Loader2, Power, MapPin, Save, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { DEFAULT_SEDE } from '../../data/mockData';
 import { DEFAULT_CHECKIN_RADIUS_METERS } from '../../hooks/useGeolocation';
@@ -27,13 +27,16 @@ const DEFAULT_ROW: SedeConfigRow = {
 };
 
 async function ensureSedeRow(): Promise<void> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('sede_config')
     .select('id')
     .eq('id', 1)
     .maybeSingle();
+  if (error) {
+    console.error('[sede_config] ensureSedeRow select error:', error.message, error.code, error.details);
+  }
   if (!data) {
-    await supabase.from('sede_config').insert({
+    const { error: insErr } = await supabase.from('sede_config').insert({
       id: 1,
       name: DEFAULT_SEDE.name,
       address: DEFAULT_SEDE.address,
@@ -43,6 +46,9 @@ async function ensureSedeRow(): Promise<void> {
       same_day_booking: false,
       allow_weekend_booking: false,
     });
+    if (insErr) {
+      console.error('[sede_config] ensureSedeRow insert error:', insErr.message, insErr.code, insErr.details);
+    }
   }
 }
 
@@ -58,13 +64,20 @@ function TestSwitch({ title, description, statusOn, statusOff, field }: TestSwit
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
 
   const refresh = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('sede_config')
       .select('same_day_booking, allow_weekend_booking, checkin_time_restriction, test_mode')
       .eq('id', 1)
       .maybeSingle();
+    if (error) {
+      console.error(`[sede_config] TestSwitch(${field}) refresh error:`, error.message, error.code, error.details);
+      setErrMsg(`Error al cargar: ${error.message}`);
+    } else {
+      setErrMsg('');
+    }
     const row = data as { same_day_booking: boolean; allow_weekend_booking: boolean; checkin_time_restriction: boolean; test_mode: boolean } | null;
     setEnabled(row ? row[field] : false);
     setLoaded(true);
@@ -81,6 +94,7 @@ function TestSwitch({ title, description, statusOn, statusOff, field }: TestSwit
     if (busy) return;
     const next = !enabled;
     setEnabled(next);
+    setErrMsg('');
     setBusy(true);
     try {
       const { data, error } = await supabase
@@ -89,15 +103,26 @@ function TestSwitch({ title, description, statusOn, statusOff, field }: TestSwit
         .select('same_day_booking, allow_weekend_booking, checkin_time_restriction, test_mode')
         .maybeSingle();
 
-      if (error || !data) {
+      if (error) {
+        console.error(`[sede_config] TestSwitch(${field}) upsert error:`, error.message, error.code, error.details);
         setEnabled(!next);
+        setErrMsg(`Error al guardar: ${error.message}`);
+        return;
+      }
+      if (!data) {
+        console.warn(`[sede_config] TestSwitch(${field}) upsert returned no data`);
+        setEnabled(!next);
+        setErrMsg('Error: el servidor no devolvió datos.');
         return;
       }
 
       const row = data as { same_day_booking: boolean; allow_weekend_booking: boolean; checkin_time_restriction: boolean; test_mode: boolean };
       setEnabled(row[field]);
-    } catch {
+      setErrMsg('');
+    } catch (err) {
+      console.error(`[sede_config] TestSwitch(${field}) unexpected error:`, err);
       setEnabled(!next);
+      setErrMsg(`Error inesperado: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
@@ -139,6 +164,12 @@ function TestSwitch({ title, description, statusOn, statusOff, field }: TestSwit
         </button>
       </div>
       <p className="text-xs text-slate-400">{enabled ? statusOn : statusOff}</p>
+      {errMsg && (
+        <p className="text-xs text-red-600 flex items-start gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          {errMsg}
+        </p>
+      )}
     </div>
   );
 }
@@ -148,6 +179,7 @@ function GpsRadiusEditor() {
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
 
   const refresh = useCallback(async () => {
     const { data } = await supabase
@@ -171,15 +203,22 @@ function GpsRadiusEditor() {
     if (busy) return;
     const clamped = Math.max(10, Math.min(5000, Math.round(value)));
     setBusy(true);
+    setErrMsg('');
     try {
       const { error } = await supabase
         .from('sede_config')
         .upsert({ id: 1, gps_radius_meters: clamped, updated_at: new Date().toISOString() }, { onConflict: 'id' });
-      if (!error) {
+      if (error) {
+        console.error('[sede_config] GpsRadiusEditor save error:', error.message, error.code, error.details);
+        setErrMsg(`Error al guardar: ${error.message}`);
+      } else {
         setValue(clamped);
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       }
+    } catch (err) {
+      console.error('[sede_config] GpsRadiusEditor unexpected error:', err);
+      setErrMsg(`Error inesperado: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
@@ -231,6 +270,12 @@ function GpsRadiusEditor() {
       <p className={`text-xs font-medium ${saved ? 'text-emerald-700' : 'text-slate-400'}`}>
         {saved ? 'Rango guardado correctamente.' : `Actual: ${value} m de radio.`}
       </p>
+      {errMsg && (
+        <p className="text-xs text-red-600 flex items-start gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          {errMsg}
+        </p>
+      )}
     </div>
   );
 }
@@ -239,6 +284,7 @@ function CheckinActiveSwitch() {
   const [active, setActive] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
 
   const refresh = useCallback(async () => {
     const { data } = await supabase
@@ -263,13 +309,20 @@ function CheckinActiveSwitch() {
     const next = !active;
     setBusy(true);
     setActive(next);
+    setErrMsg('');
     try {
       const { error } = await supabase
         .from('sede_config')
         .upsert({ id: 1, is_active: next, updated_at: new Date().toISOString() }, { onConflict: 'id' });
-      if (error) setActive(!next);
-    } catch {
+      if (error) {
+        console.error('[sede_config] CheckinActiveSwitch toggle error:', error.message, error.code, error.details);
+        setActive(!next);
+        setErrMsg(`Error al guardar: ${error.message}`);
+      }
+    } catch (err) {
+      console.error('[sede_config] CheckinActiveSwitch unexpected error:', err);
       setActive(!next);
+      setErrMsg(`Error inesperado: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
@@ -320,6 +373,12 @@ function CheckinActiveSwitch() {
           ? 'Activo: los pacientes pueden hacer check-in normalmente.'
           : 'Pausado: Recepción Cerrada / Fuera de Servicio. El check-in está inhabilitado.'}
       </p>
+      {errMsg && (
+        <p className="text-xs text-red-600 flex items-start gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          {errMsg}
+        </p>
+      )}
     </div>
   );
 }

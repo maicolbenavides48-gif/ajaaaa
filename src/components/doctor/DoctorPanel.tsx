@@ -928,13 +928,15 @@ function AvailabilityCalendarSection({
         lastTapDayRef.current = null;
         if (isScheduled) {
           setOptimisticDays((prev) => { const next = new Set(prev); next.delete(dateStr); return next; });
-          onToggleDay(doctorCedula, dateStr).catch(() => {
+          onToggleDay(doctorCedula, dateStr).catch((err) => {
+            console.error('[DoctorPanel] toggleScheduleDay (disable) error:', err);
             setOptimisticDays((prev) => { const next = new Set(prev); next.add(dateStr); return next; });
           });
           if (selectedDay === day) setSelectedDay(null);
         } else {
           setOptimisticDays((prev) => { const next = new Set(prev); next.add(dateStr); return next; });
-          onToggleDay(doctorCedula, dateStr).catch(() => {
+          onToggleDay(doctorCedula, dateStr).catch((err) => {
+            console.error('[DoctorPanel] toggleScheduleDay (enable) error:', err);
             setOptimisticDays((prev) => { const next = new Set(prev); next.delete(dateStr); return next; });
           });
         }
@@ -1171,7 +1173,11 @@ function SlotDeactivationPanel({ doctorCedula, dateStr, dayLabel, appointments }
       if (disabledSet.has(slot)) {
         setOptimisticDisabled((prev) => { const next = new Set(prev); next.delete(slot); return next; });
         setToggling(slot);
-        toggleTimeSlot(doctorCedula, dateStr, slot).then(() => setToggling(null));
+        toggleTimeSlot(doctorCedula, dateStr, slot).then(() => setToggling(null)).catch((err) => {
+          console.error('[DoctorPanel] toggleTimeSlot (enable) error:', err);
+          setOptimisticDisabled((prev) => { const next = new Set(prev); next.delete(slot); return next; });
+          setToggling(null);
+        });
       }
     } else {
       lastTapSlotRef.current = slot;
@@ -1181,7 +1187,11 @@ function SlotDeactivationPanel({ doctorCedula, dateStr, dayLabel, appointments }
         if (!disabledSet.has(slot)) {
           setOptimisticDisabled((prev) => { const next = new Set(prev); next.add(slot); return next; });
           setToggling(slot);
-          toggleTimeSlot(doctorCedula, dateStr, slot).then(() => setToggling(null));
+          toggleTimeSlot(doctorCedula, dateStr, slot).then(() => setToggling(null)).catch((err) => {
+            console.error('[DoctorPanel] toggleTimeSlot (disable) error:', err);
+            setOptimisticDisabled((prev) => { const next = new Set(prev); next.add(slot); return next; });
+            setToggling(null);
+          });
         }
       }, 280);
     }

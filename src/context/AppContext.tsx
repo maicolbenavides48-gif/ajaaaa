@@ -580,8 +580,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     await supabase
       .from('queue_state')
-      .update({ next_ticket_number: ticketNumber + 1, updated_at: new Date().toISOString() })
-      .eq('id', 1);
+      .upsert({
+        id: 1,
+        next_ticket_number: ticketNumber + 1,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
 
     await loadData();
     return mapAppointment(newApt as DbAppointment);
@@ -903,11 +906,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const { error: updateErr } = await supabase
       .from('queue_state')
-      .update({ next_ticket_number: ticketNumber + 1, updated_at: new Date().toISOString() })
-      .eq('id', 1);
+      .upsert({
+        id: 1,
+        next_ticket_number: ticketNumber + 1,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
 
     if (updateErr) {
-      console.error('queue_state update error:', updateErr.message);
+      console.error('[queue_state] scheduleAppointment next_ticket update error:', updateErr.message, updateErr.code, updateErr.details);
     }
 
     const dateDisplay = scheduledDate;
@@ -995,45 +1001,68 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleScheduleDay = async (doctorCedula: string, date: string) => {
-    const { data: existing } = await supabase
+    const { data: existing, error: selErr } = await supabase
       .from('doctor_schedule')
       .select('*')
       .eq('doctor_cedula', doctorCedula)
       .eq('schedule_date', date)
       .maybeSingle();
 
+    if (selErr) {
+      console.error('[doctor_schedule] toggleScheduleDay select error:', selErr.message, selErr.code, selErr.details);
+      throw new Error(`Error al consultar disponibilidad: ${selErr.message}`);
+    }
+
     if (existing) {
       // Deselecting a day: remove schedule and mark it as disabled
-      await supabase
+      const { error: delErr } = await supabase
         .from('doctor_schedule')
         .delete()
         .eq('doctor_cedula', doctorCedula)
         .eq('schedule_date', date);
-      const { data: alreadyDisabled } = await supabase
+      if (delErr) {
+        console.error('[doctor_schedule] toggleScheduleDay delete error:', delErr.message, delErr.code, delErr.details);
+        throw new Error(`Error al eliminar día: ${delErr.message}`);
+      }
+      const { data: alreadyDisabled, error: disSelErr } = await supabase
         .from('doctor_disabled_days')
         .select('doctor_cedula')
         .eq('doctor_cedula', doctorCedula)
         .eq('disabled_date', date)
         .maybeSingle();
+      if (disSelErr) {
+        console.error('[doctor_disabled_days] select error:', disSelErr.message, disSelErr.code, disSelErr.details);
+      }
       if (!alreadyDisabled) {
-        await supabase.from('doctor_disabled_days').insert({
+        const { error: disInsErr } = await supabase.from('doctor_disabled_days').insert({
           doctor_cedula: doctorCedula,
           disabled_date: date,
         });
+        if (disInsErr) {
+          console.error('[doctor_disabled_days] insert error:', disInsErr.message, disInsErr.code, disInsErr.details);
+          throw new Error(`Error al marcar día como no disponible: ${disInsErr.message}`);
+        }
       }
     } else {
       // Re-selecting a disabled day: re-enable schedule and clear the disabled mark
-      await supabase.from('doctor_schedule').insert({
+      const { error: insErr } = await supabase.from('doctor_schedule').insert({
         doctor_cedula: doctorCedula,
         schedule_date: date,
         start_hour: '08:00',
         end_hour: '17:00',
       });
-      await supabase
+      if (insErr) {
+        console.error('[doctor_schedule] toggleScheduleDay insert error:', insErr.message, insErr.code, insErr.details);
+        throw new Error(`Error al habilitar día: ${insErr.message}`);
+      }
+      const { error: disDelErr } = await supabase
         .from('doctor_disabled_days')
         .delete()
         .eq('doctor_cedula', doctorCedula)
         .eq('disabled_date', date);
+      if (disDelErr) {
+        console.error('[doctor_disabled_days] delete error:', disDelErr.message, disDelErr.code, disDelErr.details);
+      }
     }
     await loadData();
   };
@@ -1095,7 +1124,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleTimeSlot = async (doctorCedula: string, date: string, slotTime: string) => {
-    const { data: existing } = await supabase
+    const { data: existing, error: selErr } = await supabase
       .from('disabled_time_slots')
       .select('id')
       .eq('doctor_cedula', doctorCedula)
@@ -1103,19 +1132,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .eq('slot_time', slotTime)
       .maybeSingle();
 
+    if (selErr) {
+      console.error('[disabled_time_slots] toggleTimeSlot select error:', selErr.message, selErr.code, selErr.details);
+      throw new Error(`Error al consultar intervalo: ${selErr.message}`);
+    }
+
     if (existing) {
-      await supabase
+      const { error: delErr } = await supabase
         .from('disabled_time_slots')
         .delete()
         .eq('doctor_cedula', doctorCedula)
         .eq('schedule_date', date)
         .eq('slot_time', slotTime);
+      if (delErr) {
+        console.error('[disabled_time_slots] toggleTimeSlot delete error:', delErr.message, delErr.code, delErr.details);
+        throw new Error(`Error al liberar intervalo: ${delErr.message}`);
+      }
     } else {
-      await supabase.from('disabled_time_slots').insert({
+      const { error: insErr } = await supabase.from('disabled_time_slots').insert({
         doctor_cedula: doctorCedula,
         schedule_date: date,
         slot_time: slotTime,
       });
+      if (insErr) {
+        console.error('[disabled_time_slots] toggleTimeSlot insert error:', insErr.message, insErr.code, insErr.details);
+        throw new Error(`Error al bloquear intervalo: ${insErr.message}`);
+      }
     }
     await loadData();
   };
