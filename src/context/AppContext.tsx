@@ -173,6 +173,11 @@ interface DbQueueState {
   total_consultation_minutes: number;
 }
 
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+
 function isWeekendDate(dateStr: string): boolean {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dow = new Date(y, m - 1, d).getDay();
@@ -864,6 +869,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     if (!doctorCedula) {
       return { appointment: null, error: 'No se ha seleccionado un médico. Selecciona un doctor antes de agendar.' };
+    }
+
+    // Validate no schedule conflict for this patient at the same date+time.
+    // A patient can have multiple appointments on the same day at different times,
+    // but NOT at the same time (or overlapping) with any doctor/role.
+    const consultationMin = data.sede.consultationMinutes;
+    const newStart = timeToMinutes(scheduledTime);
+    const newEnd = newStart + consultationMin;
+
+    const { data: patientAppts, error: conflictErr } = await supabase
+      .from('appointments')
+      .select('id, scheduled_date, scheduled_time, status, doctor_name')
+      .eq('patient_cedula', patientCedula)
+      .in('status', ['scheduled', 'checked-in', 'rescheduled', 'called', 'in-attendance']);
+
+    if (conflictErr) {
+      return { appointment: null, error: `Error al verificar disponibilidad del paciente: ${conflictErr.message}` };
+    }
+
+    const conflicting = (patientAppts as { id: string; scheduled_date: string | null; scheduled_time: string; status: string; doctor_name: string | null }[] ?? [])
+      .find((a) => {
+        if (!a.scheduled_date || a.scheduled_date !== scheduledDate) return false;
+        if (!a.scheduled_time || a.scheduled_time === '--:--') return false;
+        const existStart = timeToMinutes(a.scheduled_time);
+        const existEnd = existStart + consultationMin;
+        // Overlap check: [newStart, newEnd) intersects [existStart, existEnd)
+        return newStart < existEnd && existStart < newEnd;
+      });
+
+    if (conflicting) {
+      return {
+        appointment: null,
+        error: `El paciente ya tiene una cita agendada el ${scheduledDate} a las ${conflicting.scheduled_time}${conflicting.doctor_name ? ` con ${conflicting.doctor_name}` : ''}. No puede ser atendido por dos doctores al mismo tiempo. Selecciona otra fecha u hora.`,
+      };
     }
 
     const { data: queueRow, error: queueErr } = await supabase

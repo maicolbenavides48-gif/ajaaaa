@@ -5,6 +5,8 @@ import { AppLogoMark } from '../AjaAppLogo';
 import { COUNTDOWN_SECONDS } from '../../types';
 
 const POLL_MS = 2000;
+const ANNOUNCE_INTERVAL_MS = 30_000;
+const REPETITIONS_PER_PATIENT = 3;
 
 interface QueueAppointment {
   id: string;
@@ -13,31 +15,65 @@ interface QueueAppointment {
   status: string;
   doctor_name: string | null;
   doctor_specialty: string | null;
+  doctor_id: string | null;
+  scheduled_date: string | null;
+  scheduled_time: string;
   called_at: number | null;
-}
-
-interface NextTurn {
-  ticketNumber: number;
-  patientName: string;
-  doctorName: string;
 }
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
+function timeSortKey(time: string | null | undefined): string {
+  return !time || time === '--:--' ? '99:99' : time;
+}
+
+/**
+ * Computes the per-doctor, per-day turn position for an appointment,
+ * matching the logic in queueTurns.ts (getOfficialTurn).
+ * Returns 1-based position among the same doctor + same date, excluding
+ * cancelled and absent appointments, sorted by scheduled_time then ticket_number.
+ */
+function computeTurn(
+  apt: QueueAppointment,
+  allToday: QueueAppointment[],
+): number {
+  const peers = allToday
+    .filter(
+      (a) =>
+        a.doctor_id === apt.doctor_id &&
+        a.scheduled_date === apt.scheduled_date &&
+        a.status !== 'cancelled' &&
+        a.status !== 'absent',
+    )
+    .sort(
+      (a, b) =>
+        timeSortKey(a.scheduled_time).localeCompare(timeSortKey(b.scheduled_time)) ||
+        a.ticket_number - b.ticket_number,
+    );
+  return peers.findIndex((a) => a.id === apt.id) + 1;
+}
+
 export function TvTurnosScreen() {
   const [now, setNow] = useState(Date.now());
   const [called, setCalled] = useState<QueueAppointment[]>([]);
-  const [nextTurns, setNextTurns] = useState<NextTurn[]>([]);
+  const [allToday, setAllToday] = useState<QueueAppointment[]>([]);
+  const [nextTurns, setNextTurns] = useState<{ turn: number; patientName: string; doctorName: string }[]>([]);
   const [sedeName, setSedeName] = useState('Centro de Atención');
   const [muted, setMuted] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
-  // Last appointment id announced by voice, to avoid repeating
-  const announcedRef = useRef<Set<string>>(new Set());
+
+  // Track the ordered announcement queue and announcement state
+  const announceQueueRef = useRef<QueueAppointment[]>([]);
+  const announceIdxRef = useRef(0);
+  const announceCountRef = useRef(0); // how many times current patient has been announced
+  const announceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Track patient ids that are no longer in "called" state so we stop announcing
+  const lastCalledIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -57,16 +93,18 @@ export function TvTurnosScreen() {
     fetchSede();
   }, []);
 
-  // Real-time: poll appointments + queue
+  // Real-time: poll appointments
   useEffect(() => {
     let cancelled = false;
 
     const fetchQueue = async () => {
-      // All today's queue activity: called patients, waiting and in-attendance
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      // Fetch all appointments for today (for turn computation) + any active called/queue
       const { data, error: err } = await supabase
         .from('appointments')
-        .select('id, patient_name, ticket_number, status, doctor_name, doctor_specialty, called_at')
-        .in('status', ['called', 'checked-in', 'rescheduled', 'in-attendance'])
+        .select('id, patient_name, ticket_number, status, doctor_name, doctor_specialty, doctor_id, scheduled_date, scheduled_time, called_at')
+        .in('status', ['called', 'checked-in', 'rescheduled', 'in-attendance', 'scheduled', 'attended'])
         .order('ticket_number', { ascending: true });
 
       if (cancelled) return;
@@ -76,64 +114,53 @@ export function TvTurnosScreen() {
       }
 
       const rows = (data ?? []) as QueueAppointment[];
+
+      // Today's appointments for turn computation (same doctor + same date)
+      const todayRows = rows.filter(
+        (r) => r.scheduled_date === todayStr || r.status === 'called' || r.status === 'checked-in' || r.status === 'rescheduled' || r.status === 'in-attendance',
+      );
+      setAllToday(todayRows);
+
       const calledNow = rows.filter((r) => r.status === 'called');
       setCalled(calledNow);
       setLoading(false);
 
-      // Announce new calls by voice
-      if (!mutedRef.current) {
-        for (const c of calledNow) {
-          if (!announcedRef.current.has(c.id)) {
-            announcedRef.current.add(c.id);
-            announceCall(c);
-          }
+      // Update the announcement queue
+      const currentCalledIds = new Set(calledNow.map((c) => c.id));
+      lastCalledIdsRef.current = currentCalledIds;
+
+      // Rebuild the queue from the current called patients, preserving order
+      // Sort by called_at ascending so earliest-called is first
+      const sortedCalled = [...calledNow].sort((a, b) => (a.called_at ?? 0) - (b.called_at ?? 0));
+
+      // If the queue composition changed, reset the queue
+      const oldIds = announceQueueRef.current.map((c) => c.id).join(',');
+      const newIds = sortedCalled.map((c) => c.id).join(',');
+      if (oldIds !== newIds) {
+        announceQueueRef.current = sortedCalled;
+        // Keep index in range
+        if (announceIdxRef.current >= sortedCalled.length) {
+          announceIdxRef.current = 0;
+          announceCountRef.current = 0;
         }
       }
 
-      // Next 2 turns: waiting patients (checked-in / rescheduled) after current tickets
+      // Next turns: waiting patients (checked-in / rescheduled), sorted by turn position
       const waiting = rows
         .filter((r) => r.status === 'checked-in' || r.status === 'rescheduled')
-        .sort((a, b) => a.ticket_number - b.ticket_number);
+        .map((r) => ({
+          apt: r,
+          turn: computeTurn(r, todayRows),
+        }))
+        .sort((a, b) => a.turn - b.turn);
+
       setNextTurns(
-        waiting.slice(0, 2).map((r) => ({
-          ticketNumber: r.ticket_number,
-          patientName: r.patient_name,
-          doctorName: r.doctor_name ?? 'Médico por asignar',
+        waiting.slice(0, 4).map(({ apt, turn }) => ({
+          turn,
+          patientName: apt.patient_name,
+          doctorName: apt.doctor_name ?? 'Médico por asignar',
         })),
       );
-    };
-
-    const announceCall = (c: QueueAppointment) => {
-      try {
-        // Chime
-        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        const ctx = new Ctx();
-        const notes = [523.25, 659.25, 783.99];
-        notes.forEach((freq, i) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.value = freq;
-          const start = ctx.currentTime + i * 0.18;
-          gain.gain.setValueAtTime(0, start);
-          gain.gain.linearRampToValueAtTime(0.25, start + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(start);
-          osc.stop(start + 0.5);
-        });
-
-        // Voice announcement (Spanish)
-        const utter = new SpeechSynthesisUtterance(
-          `Turno ${c.ticket_number}, ${c.patient_name}, por favor pasar con el doctor ${c.doctor_name ?? 'de turno'}`,
-        );
-        utter.lang = 'es-ES';
-        utter.rate = 0.95;
-        window.speechSynthesis.speak(utter);
-      } catch {
-        // audio not available
-      }
     };
 
     fetchQueue();
@@ -149,6 +176,102 @@ export function TvTurnosScreen() {
       void supabase.removeChannel(channel);
     };
   }, []);
+
+  // Announcement engine: every 30s, announce the current patient in the queue
+  // Each patient is announced 3 times before moving to the next.
+  // Stops automatically when the patient is no longer in "called" state.
+  const speakAnnouncement = (c: QueueAppointment) => {
+    if (mutedRef.current) return;
+    try {
+      // Chime
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new Ctx();
+      const notes = [523.25, 659.25, 783.99];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const start = ctx.currentTime + i * 0.18;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.25, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.5);
+      });
+
+      const areaText = c.doctor_specialty ?? 'Consulta general';
+      const doctorText = c.doctor_name ?? 'de turno';
+      const turnNum = computeTurn(c, allToday);
+      const utter = new SpeechSynthesisUtterance(
+        `Turno ${turnNum}, ${c.patient_name}, área ${areaText}, con el doctor ${doctorText}. Por favor pasar a consulta.`,
+      );
+      utter.lang = 'es-ES';
+      utter.rate = 0.95;
+      window.speechSynthesis.speak(utter);
+    } catch {
+      // audio not available
+    }
+  };
+
+  // Drive the cyclic announcement
+  useEffect(() => {
+    if (announceTimerRef.current) {
+      clearInterval(announceTimerRef.current);
+      announceTimerRef.current = null;
+    }
+
+    // If no called patients, nothing to announce
+    if (announceQueueRef.current.length === 0) return;
+
+    const tick = () => {
+      const queue = announceQueueRef.current;
+      if (queue.length === 0) return;
+
+      // Get current patient; skip any that are no longer "called" (left the queue)
+      let idx = announceIdxRef.current % queue.length;
+      let patient = queue[idx];
+
+      // Check if this patient is still in "called" state
+      const stillCalled = lastCalledIdsRef.current.has(patient.id);
+      if (!stillCalled) {
+        // Remove from queue and advance
+        announceQueueRef.current = queue.filter((c) => c.id !== patient.id);
+        if (announceQueueRef.current.length === 0) {
+          announceIdxRef.current = 0;
+          announceCountRef.current = 0;
+          return;
+        }
+        announceIdxRef.current = announceIdxRef.current % announceQueueRef.current.length;
+        announceCountRef.current = 0;
+        patient = announceQueueRef.current[announceIdxRef.current];
+      }
+
+      speakAnnouncement(patient);
+      announceCountRef.current += 1;
+
+      // After 3 repetitions, move to the next patient in the queue
+      if (announceCountRef.current >= REPETITIONS_PER_PATIENT) {
+        announceCountRef.current = 0;
+        announceIdxRef.current = (announceIdxRef.current + 1) % announceQueueRef.current.length;
+      }
+    };
+
+    // Announce immediately on mount/queue change, then every 30s
+    tick();
+    announceTimerRef.current = setInterval(tick, ANNOUNCE_INTERVAL_MS);
+
+    return () => {
+      if (announceTimerRef.current) {
+        clearInterval(announceTimerRef.current);
+        announceTimerRef.current = null;
+      }
+    };
+    // Re-run when the called list composition changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [called.length, called.map((c) => c.id).join(',')]);
 
   const toggleMute = () => {
     setMuted((m) => {
@@ -166,6 +289,11 @@ export function TvTurnosScreen() {
   };
 
   const gridCols = called.length >= 3 ? 'lg:grid-cols-3' : called.length === 2 ? 'lg:grid-cols-2' : '';
+
+  const calledWithTurns = useMemo(
+    () => called.map((c) => ({ ...c, turn: computeTurn(c, allToday) })),
+    [called, allToday],
+  );
 
   return (
     <div className="min-h-screen bg-slate-900 text-white flex flex-col">
@@ -209,7 +337,7 @@ export function TvTurnosScreen() {
           <div className="flex items-center justify-center">
             <RefreshCw className="w-10 h-10 text-blue-400 animate-spin" />
           </div>
-        ) : called.length === 0 ? (
+        ) : calledWithTurns.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center">
             <div className="w-24 h-24 rounded-3xl bg-slate-800 flex items-center justify-center mb-6">
               <DoorClosed className="w-12 h-12 text-slate-500" />
@@ -219,7 +347,7 @@ export function TvTurnosScreen() {
           </div>
         ) : (
           <div className={`grid gap-6 ${gridCols} mx-auto w-full max-w-6xl`}>
-            {called.map((c) => {
+            {calledWithTurns.map((c) => {
               const remaining = countdownFor(c);
               const urgent = remaining <= 60;
               return (
@@ -232,9 +360,9 @@ export function TvTurnosScreen() {
                     Pasar a consulta
                   </div>
 
-                  {/* Ticket number — huge */}
+                  {/* Turn number (per-doctor, per-day) — huge */}
                   <div className="text-8xl font-extrabold tracking-tight leading-none mb-4 tabular-nums">
-                    {pad(c.ticket_number)}
+                    {pad(c.turn)}
                   </div>
 
                   {/* Patient name — full, no cédula */}
@@ -282,13 +410,13 @@ export function TvTurnosScreen() {
           {nextTurns.length === 0 ? (
             <p className="text-slate-500 text-sm">No hay pacientes en espera con check-in.</p>
           ) : (
-            <div className="grid sm:grid-cols-2 gap-4">
-              {nextTurns.map((t) => (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {nextTurns.map((t, i) => (
                 <div
-                  key={t.ticketNumber}
+                  key={`${t.patientName}-${i}`}
                   className="flex items-center gap-4 bg-slate-900/70 rounded-2xl px-5 py-4 border border-slate-700"
                 >
-                  <div className="text-4xl font-extrabold text-blue-400 tabular-nums">{pad(t.ticketNumber)}</div>
+                  <div className="text-4xl font-extrabold text-blue-400 tabular-nums">{pad(t.turn)}</div>
                   <div className="min-w-0">
                     <p className="font-bold text-xl text-white truncate">{t.patientName}</p>
                     <p className="text-sm text-slate-400 truncate">con {t.doctorName}</p>

@@ -125,6 +125,11 @@ function formatDateDisplay(dateStr: string): string {
   return `${d} de ${MONTH_LABELS[m - 1]} de ${y}`;
 }
 
+function timeStrToMinutes(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+
 // ============================================================
 // Schedule Tab — Patient autocomplete + appointment form
 // with doctor per-day calendar and 30-min interval slots
@@ -240,6 +245,31 @@ function ScheduleTab() {
 
     if (takenSlots.includes(scheduledTime)) {
       setError('Ese intervalo ya está ocupado. Selecciona otro horario disponible.');
+      return;
+    }
+
+    // Check if the patient already has an appointment at the same date+time
+    // (with any doctor/role) — prevents scheduling conflicts.
+    const consultationMin = data.sede.consultationMinutes;
+    const newStartMin = timeStrToMinutes(scheduledTime);
+    const newEndMin = newStartMin + consultationMin;
+
+    const patientConflict = data.appointments.find((a) => {
+      if (a.patientCedula !== selectedPatient.cedula) return false;
+      if (a.scheduledDate !== scheduledDate) return false;
+      if (!a.scheduledTime || a.scheduledTime === '--:--') return false;
+      if (a.status === 'cancelled' || a.status === 'attended' || a.status === 'absent') return false;
+      const existStart = timeStrToMinutes(a.scheduledTime);
+      const existEnd = existStart + consultationMin;
+      return newStartMin < existEnd && existStart < newEndMin;
+    });
+
+    if (patientConflict) {
+      setError(
+        `Este paciente ya tiene una cita el ${formatDateDisplay(scheduledDate)} a las ${patientConflict.scheduledTime}` +
+        `${patientConflict.doctorName ? ` con ${patientConflict.doctorName}` : ''}. ` +
+        'No puede ser atendido por dos doctores al mismo tiempo. Selecciona otra fecha u hora.',
+      );
       return;
     }
 
