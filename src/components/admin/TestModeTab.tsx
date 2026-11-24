@@ -80,6 +80,7 @@ function TestSwitch({ title, description, statusOn, statusOff, field }: TestSwit
   const handleClick = async () => {
     if (busy) return;
     const next = !enabled;
+    setEnabled(next);
     setBusy(true);
     try {
       const { data, error } = await supabase
