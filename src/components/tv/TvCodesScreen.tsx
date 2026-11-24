@@ -1,58 +1,20 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Hash, Clock, Maximize2, LogOut, Loader2, AlertTriangle, DoorClosed } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 import { useCheckinActive } from '../../hooks/useCheckinActive';
+import { getCheckinQrUrl, useCheckinCode } from '../../hooks/useCheckinCode';
 import { AppLogoMark } from '../AjaAppLogo';
 import { TV_ACCESS_STORAGE_KEY } from './TvAccessGate';
-
-interface DbCheckinCode {
-  pin: string;
-  qr_code: string;
-  expires_at: string;
-  updated_at: string;
-}
 
 export function TvCodesScreen() {
   return <TvCodesPreview onLogout={() => { sessionStorage.removeItem(TV_ACCESS_STORAGE_KEY); window.location.reload(); }} />;
 }
 
 function TvCodesPreview({ onLogout }: { onLogout: () => void }) {
-  const [code, setCode] = useState<DbCheckinCode | null>(null);
+  const { code, loading, error } = useCheckinCode();
   const { active: checkinActive, loading: activeLoading } = useCheckinActive();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const containerRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const fetchCode = async () => {
-    const { data, error: err } = await supabase
-      .from('checkin_codes')
-      .select('pin, qr_code, expires_at, updated_at')
-      .eq('id', 1)
-      .maybeSingle();
-
-    if (err) {
-      setError(err.message);
-      setLoading(false);
-      return;
-    }
-    if (!data) {
-      setError('No hay código activo.');
-      setLoading(false);
-      return;
-    }
-    setCode(data as DbCheckinCode);
-    setError(null);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchCode();
-    timerRef.current = setInterval(fetchCode, 5000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -70,7 +32,7 @@ function TvCodesPreview({ onLogout }: { onLogout: () => void }) {
 
   const qrPayload = useMemo(() => {
     if (!code) return '';
-    return JSON.stringify({ qr: code.qr_code, pin: code.pin });
+    return getCheckinQrUrl(code.qrCode);
   }, [code]);
 
   const handleFullscreen = () => {

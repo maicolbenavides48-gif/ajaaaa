@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Tv, Clock, Hash, Users, RefreshCw, DoorClosed } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { useCheckinCode } from '../../hooks/useCheckinCode';
+import { getCheckinQrUrl, useCheckinCode } from '../../hooks/useCheckinCode';
 import { useCheckinActive } from '../../hooks/useCheckinActive';
 import { AppLogoMark } from '../AjaAppLogo';
 import type { Appointment } from '../../types';
@@ -99,7 +99,7 @@ export function TvScreen() {
 
   const qrPayload = useMemo(() => {
     if (!code) return '';
-    return JSON.stringify({ qr: code.qrCode, pin: code.pin });
+    return getCheckinQrUrl(code.qrCode);
   }, [code]);
 
   return (

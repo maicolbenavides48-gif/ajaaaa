@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import particleSvg from '../assets/aja_particles.svg';
+import particleImage from '../assets/aja_app_icono_transparente.png';
 
 type Particle = {
   x: number;
@@ -33,7 +33,7 @@ export function InteractiveBackground() {
     if (!ctx) return;
 
     const img = new Image();
-    img.src = particleSvg;
+    img.src = particleImage;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const isMobile = window.matchMedia(MOBILE_QUERY).matches;

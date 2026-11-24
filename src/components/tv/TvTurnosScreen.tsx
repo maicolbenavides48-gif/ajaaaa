@@ -138,9 +138,15 @@ export function TvTurnosScreen() {
 
     fetchQueue();
     const timer = setInterval(fetchQueue, POLL_MS);
+    const channel = supabase
+      .channel('tv-turnos-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => { void fetchQueue(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_state' }, () => { void fetchQueue(); })
+      .subscribe();
     return () => {
       cancelled = true;
       clearInterval(timer);
+      void supabase.removeChannel(channel);
     };
   }, []);
 

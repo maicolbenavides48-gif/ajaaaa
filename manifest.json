@@ -7,7 +7,7 @@
   "background_color": "#ffffff",
   "theme_color": "#21638b",
   "icons": [
-    { "src": "/aja_app_icono_sin_letras.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
-    { "src": "/aja_app_icono_sin_letras.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/assets/aja_app_icono_transparente.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/assets/aja_app_icono_transparente.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }

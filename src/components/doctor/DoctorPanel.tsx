@@ -531,7 +531,7 @@ function AppointmentRow({ apt, isNext, onClick }: AppointmentRowProps) {
           isNext ? 'bg-blue-700 text-white' : isScheduled ? 'bg-slate-50 text-slate-400' : 'bg-slate-100 text-slate-500'
         }`}
       >
-        {String(apt.ticketNumber).padStart(2, '0')}
+        {isScheduled ? '—' : String(apt.ticketNumber).padStart(2, '0')}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-800 truncate">{apt.patientName}</p>

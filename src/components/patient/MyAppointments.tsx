@@ -640,8 +640,10 @@ function AppointmentDetailCard({ apt, users, turn, canCancel, onCancel }: Appoin
           </div>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400">Turno</p>
-          <p className="text-lg font-bold text-blue-700">#{String(turn).padStart(2, '0')}</p>
+          <p className="text-xs text-slate-400">{apt.status === 'scheduled' ? 'Turno' : 'Turno oficial'}</p>
+          <p className="text-lg font-bold text-blue-700">
+            {apt.status === 'scheduled' ? 'Al hacer check-in' : `#${String(turn).padStart(2, '0')}`}
+          </p>
         </div>
       </div>
 
