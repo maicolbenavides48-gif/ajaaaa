@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, CreditCard, Navigation, Loader2, CheckCircle2, AlertTriangle, Stethoscope, MapPin, Eye, EyeOff } from 'lucide-react';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { useApp } from '../../context/AppContext';
+import { useCheckinActive } from '../../hooks/useCheckinActive';
 import { CheckInZoneCard } from './CheckInZoneCard';
 import type { User as AppUser } from '../../types';
 
@@ -12,6 +13,7 @@ interface CheckInScreenProps {
 
 export function CheckInScreen({ user, onCheckedIn }: CheckInScreenProps) {
   const { data, checkIn } = useApp();
+  const { testMode } = useCheckinActive();
   const { checkLocation, simulateNear, result, loading } = useGeolocation(
     data.sede.lat,
     data.sede.lng,
@@ -26,7 +28,7 @@ export function CheckInScreen({ user, onCheckedIn }: CheckInScreenProps) {
   const [showCedula, setShowCedula] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const geoOk = result.status === 'success' || result.status === 'simulated';
+  const geoOk = testMode || result.status === 'success' || result.status === 'simulated';
 
   useEffect(() => {
     setName(user.name);
@@ -39,11 +41,11 @@ export function CheckInScreen({ user, onCheckedIn }: CheckInScreenProps) {
       setFormError('Por favor completa todos los campos.');
       return;
     }
-    if (!geoOk || result.distance === null) {
+    if (!testMode && (!geoOk || result.distance === null)) {
       setFormError('Debes verificar tu ubicación primero.');
       return;
     }
-    const apt = await checkIn(cedula.trim(), name.trim(), result.distance);
+    const apt = await checkIn(cedula.trim(), name.trim(), testMode ? 0 : (result.distance ?? 0));
     if (apt) {
       onCheckedIn();
     } else {

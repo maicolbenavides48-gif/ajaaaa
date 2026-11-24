@@ -84,8 +84,7 @@ function TestSwitch({ title, description, statusOn, statusOff, field }: TestSwit
     try {
       const { data, error } = await supabase
         .from('sede_config')
-        .update({ [field]: next, updated_at: new Date().toISOString() })
-        .eq('id', 1)
+        .upsert({ id: 1, [field]: next, updated_at: new Date().toISOString() }, { onConflict: 'id' })
         .select('same_day_booking, allow_weekend_booking, checkin_time_restriction, test_mode')
         .maybeSingle();
 
@@ -174,8 +173,7 @@ function GpsRadiusEditor() {
     try {
       const { error } = await supabase
         .from('sede_config')
-        .update({ gps_radius_meters: clamped, updated_at: new Date().toISOString() })
-        .eq('id', 1);
+        .upsert({ id: 1, gps_radius_meters: clamped, updated_at: new Date().toISOString() }, { onConflict: 'id' });
       if (!error) {
         setValue(clamped);
         setSaved(true);
@@ -267,8 +265,7 @@ function CheckinActiveSwitch() {
     try {
       const { error } = await supabase
         .from('sede_config')
-        .update({ is_active: next, updated_at: new Date().toISOString() })
-        .eq('id', 1);
+        .upsert({ id: 1, is_active: next, updated_at: new Date().toISOString() }, { onConflict: 'id' });
       if (error) setActive(!next);
     } catch {
       setActive(!next);

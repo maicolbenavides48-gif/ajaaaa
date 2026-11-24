@@ -111,7 +111,7 @@ export function DoctorPanel({ user }: DoctorPanelProps) {
   // Filter appointments to show ONLY today's AND only this doctor's
   const todayStr = getTodayStr();
   const myAppointments = data.appointments.filter(
-    (a) => a.doctorCedula === undefined || a.doctorCedula === user.cedula,
+    (a) => a.doctorCedula === user.cedula,
   );
   const waitingPatients = myAppointments
     .filter(

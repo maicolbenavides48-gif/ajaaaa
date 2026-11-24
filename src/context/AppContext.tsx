@@ -168,6 +168,7 @@ interface DbQueueState {
   next_ticket_number: number;
   current_called_id: string | null;
   countdown_ends_at: number | null;
+  countdown_ends_at_ms: number | null;
   attended_count: number;
   total_consultation_minutes: number;
 }
@@ -335,7 +336,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       queueState = {
         nextTicketNumber: q.next_ticket_number,
         currentCalledId: q.current_called_id,
-        countdownEndsAt: q.countdown_ends_at,
+        countdownEndsAt: q.countdown_ends_at_ms ?? q.countdown_ends_at,
         attendedCount: q.attended_count,
         totalConsultationMinutes: q.total_consultation_minutes,
       };
@@ -499,7 +500,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     await supabase
       .from('queue_state')
-      .update({ current_called_id: null, countdown_ends_at: null, updated_at: new Date().toISOString() })
+      .update({ current_called_id: null, countdown_ends_at_ms: null, updated_at: new Date().toISOString() })
       .eq('id', 1)
       .eq('current_called_id', calledId);
 
@@ -647,12 +648,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     await supabase
       .from('queue_state')
-      .update({
+      .upsert({
+        id: 1,
         current_called_id: next.id,
-        countdown_ends_at: now + COUNTDOWN_SECONDS * 1000,
+        countdown_ends_at_ms: now + COUNTDOWN_SECONDS * 1000,
         updated_at: new Date().toISOString(),
-      })
-      .eq('id', 1);
+      }, { onConflict: 'id' });
 
     await loadData();
   };
@@ -686,12 +687,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     await supabase
       .from('queue_state')
-      .update({
+      .upsert({
+        id: 1,
         attended_count: (qs?.attended_count ?? 0) + 1,
         total_consultation_minutes: (qs?.total_consultation_minutes ?? 0) + durationMin,
         updated_at: new Date().toISOString(),
-      })
-      .eq('id', 1);
+      }, { onConflict: 'id' });
 
     await loadData();
   };
@@ -704,7 +705,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     await supabase
       .from('queue_state')
-      .update({ current_called_id: null, countdown_ends_at: null, updated_at: new Date().toISOString() })
+      .update({ current_called_id: null, countdown_ends_at_ms: null, updated_at: new Date().toISOString() })
       .eq('id', 1)
       .eq('current_called_id', calledId);
 
@@ -743,7 +744,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     await supabase
       .from('queue_state')
-      .update({ current_called_id: null, countdown_ends_at: null, updated_at: new Date().toISOString() })
+      .update({ current_called_id: null, countdown_ends_at_ms: null, updated_at: new Date().toISOString() })
       .eq('id', 1)
       .eq('current_called_id', calledId);
 
@@ -751,7 +752,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateSede = async (sede: Partial<SedeConfig>) => {
-    const update: Record<string, number | string | boolean> = {};
+    const update: Record<string, number | string | boolean> = { id: 1 };
     if (sede.name !== undefined) update.name = sede.name;
     if (sede.address !== undefined) update.address = sede.address;
     if (sede.lat !== undefined) update.lat = sede.lat;
@@ -765,7 +766,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (sede.gpsRadiusMeters !== undefined) update.gps_radius_meters = sede.gpsRadiusMeters;
     update.updated_at = new Date().toISOString();
 
-    const { error } = await supabase.from('sede_config').update(update).eq('id', 1);
+    const { error } = await supabase.from('sede_config').upsert(update, { onConflict: 'id' });
     if (error) throw error;
     await loadData();
   };
@@ -1262,15 +1263,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await supabase.from('appointments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase
       .from('queue_state')
-      .update({
+      .upsert({
+        id: 1,
         next_ticket_number: 1,
         current_called_id: null,
-        countdown_ends_at: null,
+        countdown_ends_at_ms: null,
         attended_count: 0,
         total_consultation_minutes: 0,
         updated_at: new Date().toISOString(),
-      })
-      .eq('id', 1);
+      }, { onConflict: 'id' });
     await loadData();
   };
 

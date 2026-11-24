@@ -227,10 +227,11 @@ function ScheduleTab() {
       return;
     }
 
-    // Check if slot is already taken
+    // Check if slot is already taken — only for this specific doctor
     const takenSlots = data.appointments
       .filter(
         (a) =>
+          a.doctorCedula === selectedDoctorCedula &&
           a.scheduledDate === scheduledDate &&
           a.scheduledTime === scheduledTime &&
           (a.status === 'scheduled' || a.status === 'checked-in' || a.status === 'rescheduled'),
@@ -487,6 +488,7 @@ function ScheduleTab() {
               appointments={data.appointments}
               selectedDate={scheduledDate}
               allowSameDay={data.sede.allowSameDayBooking}
+              doctorCedula={selectedDoctorCedula}
               onSelectDate={(d) => { setScheduledDate(d); setScheduledTime(''); setError(''); }}
             />
           )}
@@ -510,6 +512,7 @@ function ScheduleTab() {
               selectedTime={scheduledTime}
               onSelectTime={(t) => { setScheduledTime(t); setError(''); }}
               disabledSlots={getDisabledTimeSlots(selectedDoctorCedula, scheduledDate)}
+              doctorCedula={selectedDoctorCedula}
             />
           )}
 
@@ -587,6 +590,7 @@ interface DoctorDayCalendarProps {
   appointments: Appointment[];
   selectedDate: string;
   allowSameDay: boolean;
+  doctorCedula: string;
   onSelectDate: (date: string) => void;
 }
 
@@ -615,7 +619,7 @@ const CalendarDayCell = memo(function CalendarDayCell({
   );
 });
 
-function DoctorDayCalendar({ schedule, appointments, selectedDate, allowSameDay, onSelectDate }: DoctorDayCalendarProps) {
+function DoctorDayCalendar({ schedule, appointments, selectedDate, allowSameDay, doctorCedula, onSelectDate }: DoctorDayCalendarProps) {
   const onSelectRef = useRef(onSelectDate);
   onSelectRef.current = onSelectDate;
   const handleSelect = useCallback((d: string) => onSelectRef.current(d), []);
@@ -624,6 +628,9 @@ function DoctorDayCalendar({ schedule, appointments, selectedDate, allowSameDay,
   const [viewMonth, setViewMonth] = useState(today.getMonth());
 
   const scheduleMap = new Map(schedule.map((s) => [s.scheduleDate, s]));
+
+  // Filter appointments to only this doctor's — prevents cross-doctor slot counting
+  const doctorAppointments = appointments.filter((a) => a.doctorCedula === doctorCedula);
 
   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const canGoPrev = new Date(viewYear, viewMonth - 1, 1) >= currentMonthStart;
@@ -651,7 +658,7 @@ function DoctorDayCalendar({ schedule, appointments, selectedDate, allowSameDay,
     if (!daySched) return 'off';
 
     const totalSlots = FIXED_SLOTS.length;
-    const takenSlots = appointments.filter(
+    const takenSlots = doctorAppointments.filter(
       (a) =>
         a.scheduledDate === dateStr &&
         (a.status === 'scheduled' || a.status === 'checked-in' || a.status === 'rescheduled'),
@@ -773,9 +780,10 @@ interface SlotSelectorProps {
   selectedTime: string;
   onSelectTime: (time: string) => void;
   disabledSlots: string[];
+  doctorCedula: string;
 }
 
-function SlotSelector({ schedule, appointments, selectedDate, selectedTime, onSelectTime, disabledSlots }: SlotSelectorProps) {
+function SlotSelector({ schedule, appointments, selectedDate, selectedTime, onSelectTime, disabledSlots, doctorCedula }: SlotSelectorProps) {
   const daySched = schedule.find((s) => s.scheduleDate === selectedDate);
 
   if (!daySched) {
@@ -791,6 +799,7 @@ function SlotSelector({ schedule, appointments, selectedDate, selectedTime, onSe
     appointments
       .filter(
         (a) =>
+          a.doctorCedula === doctorCedula &&
           a.scheduledDate === selectedDate &&
           (a.status === 'scheduled' || a.status === 'checked-in' || a.status === 'rescheduled'),
       )
