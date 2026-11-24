@@ -3,7 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Hash, Clock, Maximize2, LogOut, Loader2, AlertTriangle, DoorClosed } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useCheckinActive } from '../../hooks/useCheckinActive';
-import { AppLogoMark } from '../FastyTurnLogo';
+import { AppLogoMark } from '../AjaAppLogo';
 import { TV_ACCESS_STORAGE_KEY } from './TvAccessGate';
 
 interface DbCheckinCode {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Component, type ReactNode } from 'react';
 import { LogOut, ArrowRight, AlertCircle, RefreshCw, MessageCircle, X } from 'lucide-react';
-import { AppLogoMark } from './components/FastyTurnLogo';
+import { AppLogoMark } from './components/AjaAppLogo';
 import { AppProvider, useApp } from './context/AppContext';
 import { LoginScreen } from './components/LoginScreen';
 import { MyAppointments } from './components/patient/MyAppointments';

@@ -4,7 +4,7 @@ import { Tv, Clock, Hash, Users, RefreshCw, DoorClosed } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useCheckinCode } from '../../hooks/useCheckinCode';
 import { useCheckinActive } from '../../hooks/useCheckinActive';
-import { AppLogoMark } from '../FastyTurnLogo';
+import { AppLogoMark } from '../AjaAppLogo';
 import type { Appointment } from '../../types';
 
 interface DbAppointment {

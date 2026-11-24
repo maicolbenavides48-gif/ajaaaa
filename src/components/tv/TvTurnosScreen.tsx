@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Tv, Users, Volume2, VolumeX, RefreshCw, DoorClosed, Stethoscope, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { AppLogoMark } from '../FastyTurnLogo';
+import { AppLogoMark } from '../AjaAppLogo';
 import { COUNTDOWN_SECONDS } from '../../types';
 
 const POLL_MS = 2000;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CreditCard, ArrowRight, AlertCircle, Loader2, MapPin, Eye, EyeOff } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { AppLogoMark } from './FastyTurnLogo';
+import { AppLogoMark } from './AjaAppLogo';
 
 export function LoginScreen() {
   const { login, data } = useApp();

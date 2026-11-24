@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Lock, AlertTriangle, MonitorPlay } from 'lucide-react';
-import { AppLogoMark } from '../FastyTurnLogo';
+import { AppLogoMark } from '../AjaAppLogo';
 
 export const TV_ACCESS_STORAGE_KEY = 'tv-access-ok';
 
