@@ -904,6 +904,7 @@ function AvailabilityCalendarSection({
     if (!optimisticSet.has(dateStr)) return 'off';
     const takenSlots = appointments.filter(
       (a) =>
+        a.doctorCedula === doctorCedula &&
         a.scheduledDate === dateStr &&
         (a.status === 'scheduled' || a.status === 'checked-in' || a.status === 'rescheduled'),
     ).length;
@@ -1153,11 +1154,12 @@ function SlotDeactivationPanel({ doctorCedula, dateStr, dayLabel, appointments }
     appointments
       .filter(
         (a) =>
+          a.doctorCedula === doctorCedula &&
           a.scheduledDate === dateStr &&
           (a.status === 'scheduled' || a.status === 'checked-in' || a.status === 'rescheduled'),
       )
       .map((a) => a.scheduledTime),
-  ), [appointments, dateStr]);
+  ), [appointments, dateStr, doctorCedula]);
 
   const handleSlotTap = (slot: string) => {
     if (takenSlots.has(slot)) return;

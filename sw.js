@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aja-app-v3';
+const CACHE_NAME = 'aja-app-v4';
 const ASSETS = ['/'];
 
 self.addEventListener('install', (event) => {
